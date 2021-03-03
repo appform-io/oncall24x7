@@ -1,0 +1,53 @@
+server:
+  applicationConnectors:
+    - type: http
+      port: 9000
+  adminConnectors:
+    - type: http
+      port: 9001
+  applicationContextPath: /
+  requestLog:
+    appenders:
+      - type: console
+        timeZone: IST
+
+logging:
+  level: INFO
+  loggers:
+    deprecation: ERROR
+    org.hibernate: ERROR
+    QueuedSender: WARN
+    com.codahale.metrics.collectd: ERROR
+    io.appform: DEBUG
+    javax.ws.rs.client: DEBUG
+  appenders:
+    - type: console
+      threshold: TRACE
+      timeZone: IST
+      logFormat: "%(%-5level) [%date] %X{TRACE-ID} [%thread] [%logger{0}]: %message%n"
+
+db:
+  driverClass: org.mariadb.jdbc.Driver
+  user: root
+  password: password
+  url: jdbc:mariadb://localhost/oncall
+  properties:
+    charSet: UTF-8
+    hibernate.dialect: org.hibernate.dialect.MariaDBDialect
+#    hibernate.hbm2ddl.auto: update
+    hibernate.show_sql: true
+  maxWaitForConnection: 1s
+  validationQuery: "/* MyApplication Health Check */ SELECT 1"
+  minSize: 8
+  maxSize: 8
+  initialSize: 8
+  checkConnectionWhileIdle: false
+
+httpClient:
+  connectionTimeout: 5s
+  connectionRequestTimeout: 5s
+
+slackSecrets:
+  clientId: "${SLACK_CLIENT_ID}"
+  clientSecret: "${SLACK_CLIENT_SECRET}"
+  signingSecret: "${SLACK_SIGNING_SECRET}"
