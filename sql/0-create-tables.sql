@@ -18,5 +18,6 @@ CREATE TABLE `oncall` (
   `current` varchar(255) NOT NULL,
   `created` datetime(3) DEFAULT current_timestamp(3),
   `updated` datetime(3) DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3),
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_team_channel` (`team_id`,`channel_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4;
