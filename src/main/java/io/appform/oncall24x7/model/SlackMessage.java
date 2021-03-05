@@ -10,6 +10,7 @@ import lombok.Value;
 @Value
 @Builder
 public class SlackMessage {
+    String channel;
     String text;
     JsonNode blocks;
 }

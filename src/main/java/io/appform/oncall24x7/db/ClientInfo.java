@@ -12,28 +12,22 @@ import java.util.Date;
  *
  */
 @Entity
-@Table(name = "channel_info",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_channel_info", columnNames = {"team_id", "channel_id"})
-        })
+@Table(name = "client_info")
 @NamedQueries({
         @NamedQuery(
-                name = "findChannelInfo",
-                query = "from ChannelInfo c where c.teamId = :teamId and c.channelId = :channelId"
+                name = "findClientInfo",
+                query = "from ClientInfo c where c.teamId = :teamId"
         )
 })
 @Data
 @NoArgsConstructor
-public class ChannelInfo {
+public class ClientInfo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
-    @Column(name = "team_id", nullable = false)
+    @Column(name = "team_id", nullable = false, unique = true)
     private String teamId;
-
-    @Column(name = "channel_id", nullable = false)
-    private String channelId;
 
     @Column(name = "bot_token", nullable = false)
     private String botToken;
@@ -56,15 +50,13 @@ public class ChannelInfo {
     @Generated(value = GenerationTime.ALWAYS)
     private Date updated;
 
-    public ChannelInfo(
+    public ClientInfo(
             String teamId,
-            String channelId,
             String botToken,
             String webhook,
             String botUserId,
             String botOwnerUserId) {
         this.teamId = teamId;
-        this.channelId = channelId;
         this.botToken = botToken;
         this.webhook = webhook;
         this.botUserId = botUserId;

@@ -4,14 +4,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
-import io.appform.oncall24x7.db.ChannelInfo;
-import io.appform.oncall24x7.db.ChannelInfoDao;
+import io.appform.oncall24x7.db.ClientInfo;
+import io.appform.oncall24x7.db.ClientInfoDao;
 import io.appform.oncall24x7.db.Oncall;
 import io.appform.oncall24x7.db.OncallDao;
 import io.appform.oncall24x7.events.Bus;
 import io.appform.oncall24x7.events.SlackcallEventVisitor;
 import io.appform.oncall24x7.resources.Root;
 import io.dropwizard.Application;
+import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.client.JerseyClientBuilder;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
@@ -29,7 +30,7 @@ import org.glassfish.jersey.client.ClientProperties;
 @Slf4j
 public class App extends Application<AppConfig> {
 
-    private HibernateBundle<AppConfig> db = new HibernateBundle<AppConfig>(Oncall.class, ChannelInfo.class) {
+    private HibernateBundle<AppConfig> db = new HibernateBundle<AppConfig>(Oncall.class, ClientInfo.class) {
         @Override
         public PooledDataSourceFactory getDataSourceFactory(AppConfig appConfig) {
             return appConfig.getDb();
@@ -42,6 +43,7 @@ public class App extends Application<AppConfig> {
         bootstrap.setConfigurationSourceProvider(
                 new SubstitutingSourceProvider(bootstrap.getConfigurationSourceProvider(),
                                                new EnvironmentVariableSubstitutor(false)));
+        bootstrap.addBundle(new AssetsBundle("/assets", "/page", "index.html"));
         bootstrap.addBundle(db);
     }
 
@@ -60,14 +62,14 @@ public class App extends Application<AppConfig> {
         httpClient.property(ClientProperties.CONNECT_TIMEOUT, 0);
         httpClient.property(ClientProperties.READ_TIMEOUT, 0);
 
-        val channelInfoDao = new ChannelInfoDao(db.getSessionFactory());
+        val clientInfoDao = new ClientInfoDao(db.getSessionFactory());
         val oncallDao = new OncallDao(db.getSessionFactory());
         val bus = new Bus(new SlackcallEventVisitor(httpClient, objectMapper,
-                                                    channelInfoDao));
+                                                    clientInfoDao));
 
         environment.jersey().register(
                 new Root(objectMapper,
-                         channelInfoDao,
+                         clientInfoDao,
                          oncallDao,
                          httpClient,
                          environment.lifecycle()

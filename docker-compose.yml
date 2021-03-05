@@ -1,0 +1,27 @@
+version: '2'
+services:
+   mariadb:
+    image: mariadb:10.5.9
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: oncall
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - /var/lib/docker-mariadb/oncall:/var/lib/mysql
+#      - sql:/docker-entrypoint-initdb.d
+   oncall:
+    container_name: oncall
+    build: .
+    ports:
+    - "9000:9000"
+    - "9001:9001"
+    volumes:
+    - /var/log/oncall
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_URL: ${DB_URL}
+    depends_on:
+      - mariadb
+

@@ -6,8 +6,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import io.appform.oncall24x7.Message;
 import io.appform.oncall24x7.SlackSecrets;
-import io.appform.oncall24x7.db.ChannelInfo;
-import io.appform.oncall24x7.db.ChannelInfoDao;
+import io.appform.oncall24x7.db.ClientInfo;
+import io.appform.oncall24x7.db.ClientInfoDao;
 import io.appform.oncall24x7.db.OncallDao;
 import io.appform.oncall24x7.model.SlackMessage;
 import io.appform.oncall24x7.model.SlackWebhookResponse;
@@ -16,7 +16,6 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.http.HttpStatus;
-import org.apache.http.client.utils.URIBuilder;
 import org.hibernate.validator.constraints.NotEmpty;
 
 import javax.ws.rs.*;
@@ -38,7 +37,7 @@ import java.util.concurrent.ExecutorService;
 @Slf4j
 public class Root {
     private final ObjectMapper mapper;
-    private final ChannelInfoDao channelInfoDao;
+    private final ClientInfoDao clientInfoDao;
     private final OncallDao oncallDao;
     private final Client httpClient;
     private final ExecutorService executorService;
@@ -46,11 +45,11 @@ public class Root {
 
     public Root(
             ObjectMapper mapper,
-            ChannelInfoDao channelInfoDao,
+            ClientInfoDao clientInfoDao,
             OncallDao oncallDao,
             Client httpClient, ExecutorService executorService, SlackSecrets slackSecrets) {
         this.mapper = mapper;
-        this.channelInfoDao = channelInfoDao;
+        this.clientInfoDao = clientInfoDao;
         this.oncallDao = oncallDao;
         this.httpClient = httpClient;
         this.executorService = executorService;
@@ -71,7 +70,7 @@ public class Root {
     @UnitOfWork
     public Response register(@QueryParam("code") final String tempAuthCode) {
         if (!Strings.isNullOrEmpty(tempAuthCode)) {
-            val appConfigUrl = saveChannelInfo(tempAuthCode).orElse(null);
+            val appConfigUrl = saveClientInfo(tempAuthCode).orElse(null);
             if (!Strings.isNullOrEmpty(appConfigUrl)) {
                 return Response.status(Response.Status.FOUND)
                         .location(URI.create(appConfigUrl))
@@ -79,14 +78,15 @@ public class Root {
             }
             return Response.serverError().build();
         }
-        val uri = new URIBuilder()
+        /*val uri = new URIBuilder()
                 .setScheme("https")
                 .setHost("slack.com")
                 .setPath("/oauth/authorize")
                 .setParameter("client_id", slackSecrets.getClientId())
                 .setParameter("scope", "commands,incoming-webhook,users.profile:read")
                 .build();
-        return Response.status(Response.Status.FOUND).location(uri).build();
+        return Response.status(Response.Status.FOUND).location(uri).build();*/
+        return Response.seeOther(URI.create("/page")).build();
     }
 /*
 
@@ -138,23 +138,25 @@ public class Root {
             //This is a rich event
             val eventNode = event.at("/event");
             if ("app_mention" .equals(eventNode.get("type").asText())) {
-                val teamId = eventNode.at("/team").asText();
+                val teamId = event.at("/team_id").asText();
                 val channelId = eventNode.at("/channel").asText();
-                val channelInfo = channelInfoDao.currentInfo(teamId, channelId).orElse(null);
+                val clientInfo = clientInfoDao.currentInfo(teamId).orElse(null);
                 val sender = eventNode.at("/user").asText();
-                if (null != channelInfo) {
+                if (null != clientInfo) {
                     val oncall = oncallDao.findCurrent(teamId, channelId).orElse(null);
                     if (oncall == null) {
-                        sendMessage(channelInfo,
+                        sendMessage(clientInfo,
+                                    channelId,
                                     Message.ONCALL_NOT_SET,
                                     ImmutableMap.of("sender", sender));
                     }
                     else {
-                        val botUserId = channelInfo.getBotUserId();
+                        val botUserId = clientInfo.getBotUserId();
                         val original = eventNode.at("/text")
                                 .asText()
                                 .replaceAll("<@" + botUserId + ">", "Oncall");
-                        sendMessage(channelInfo,
+                        sendMessage(clientInfo,
+                                    channelId,
                                     Message.BOT_MENTIONED,
                                     ImmutableMap.of("oncall", oncall.getCurrent(),
                                                     "sender", sender),
@@ -169,7 +171,7 @@ public class Root {
     }
 
     @SneakyThrows
-    private Optional<String> saveChannelInfo(String accessCode) {
+    private Optional<String> saveClientInfo(String accessCode) {
         Form form = new Form();
 
         form.param("code", accessCode);
@@ -191,11 +193,12 @@ public class Root {
             val webhook = jsonNode.at("/incoming_webhook/url").asText();
             val botUserId = jsonNode.at("/bot_user_id").asText();
             val botOwnerUserId = jsonNode.at("/authed_user/id").asText();
-            val savedChannelInfo = channelInfoDao.save(teamId, channelId, botToken, webhook, botUserId, botOwnerUserId);
-            log.info("Channel infor save status for team: {}, channel: {} is {}",
-                     teamId, channelId, savedChannelInfo.isPresent());
-            if (savedChannelInfo.isPresent()) {
-                sendMessage(savedChannelInfo.get(),
+            val savedClientInfo = clientInfoDao.save(teamId, botToken, webhook, botUserId, botOwnerUserId);
+            log.info("Channel info save status for team: {}, channel: {} is {}",
+                     teamId, channelId, savedClientInfo.isPresent());
+            if (savedClientInfo.isPresent()) {
+                sendMessage(savedClientInfo.get(),
+                            channelId,
                             Message.BOT_ADDED_MESSAGE,
                             Collections.singletonMap("owner", botOwnerUserId));
                 return Optional.ofNullable(jsonNode.at("/incoming_webhook/configuration_url").asText());
@@ -219,26 +222,29 @@ public class Root {
                 .build();
     }
 
-    private boolean sendMessage(final ChannelInfo channelInfo, Message message, Map<String, Object> context) {
-        return sendMessage(channelInfo, message, context, null);
+    private boolean sendMessage(final ClientInfo clientInfo, String channelId, Message message, Map<String, Object> context) {
+        return sendMessage(clientInfo, channelId, message, context, null);
     }
 
     private boolean sendMessage(
-            final ChannelInfo channelInfo,
+            final ClientInfo clientInfo,
+            final String channelId,
             Message message,
             Map<String, Object> context,
             String quote) {
         executorService.submit(() -> {
             try {
-                val webhook = channelInfo.getWebhook();
+                val webhook = clientInfo.getWebhook();
                 final JsonNode markdown = Message.markdown(message, context, mapper, quote);
                 final SlackMessage slackMessage = SlackMessage.builder()
+                        .channel(channelId)
                         .text(Message.text(message, context))
                         .blocks(markdown)
                         .build();
                 log.debug("Node: {}", mapper.valueToTree(slackMessage));
-                val response = httpClient.target(webhook)
+                val response = httpClient.target("https://slack.com/api/chat.postMessage")
                         .request()
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + clientInfo.getBotToken())
                         .buildPost(Entity.entity(slackMessage,
                                                  new Variant(MediaType.APPLICATION_JSON_TYPE, "", "")))
                         .invoke();
